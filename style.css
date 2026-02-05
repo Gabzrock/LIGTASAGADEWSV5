@@ -1,4 +1,4 @@
-:root {
+        :root {
             --primary-color: #008080; /* Teal */
             --secondary-color: #FFA500; /* Orange */
             --dark-teal: #1a3b42;
@@ -162,7 +162,7 @@
         #navbar {
             position: absolute;
             top: 20px;
-            left: 20px;
+            left: 50px;
             z-index: 1000;
             background: var(--bg-white);
             border-radius: 8px;
