@@ -1,4 +1,4 @@
-// --- 1. UI Logic & Helpers ---
+        // --- 1. UI Logic & Helpers ---
 
         var cachedAWSData = []; // Store Sheetlabs data globally
 
@@ -21,8 +21,8 @@
         updateClock();
         setInterval(updateClock, 1000);
 
-        function Homebutton() { alert("Home button clicked"); }
-        function AWSbutton() { alert("AWS Monitoring button clicked"); }
+        function Homebutton() { window.location.href = '';  }
+        function AWSbutton() { window.location.href = 'https://gabzrock.github.io/LIGTAS-AGADLandslide-Warning-Advisories/'; }
 
         function updatePropertiesTable(layerName, properties) {
             const tableBody = document.getElementById('propertiesTableBody');
