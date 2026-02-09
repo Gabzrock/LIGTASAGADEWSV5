@@ -1,6 +1,6 @@
 // --- 1. UI Logic & Helpers ---
 
-        var cachedAWSData = []; // Store Sheetlabs data globally
+        var cachedAWSData = []; // Store data globally
 
         window.addEventListener('load', () => {
             setTimeout(() => {
@@ -280,9 +280,10 @@
         document.getElementById('overrideBtn').onclick = () => { document.getElementById('errorOverride').style.display = 'none'; };
         document.getElementById('retryBtn').onclick = () => { location.reload(); };
 
-        // --- 6. SHEETLABS API ---
+        // --- 6. DATA API: Sheetlabs with PapaParse Fallback ---
 
         const warningLayerGroup = L.layerGroup().addTo(map);
+        const googleSheetCSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSosfBP3StMyRUzwI0tUZPsLjPVH1zePCz8gZbTMOzjOvnonbmNCoy5VT46UxO0qdqb-Wm9EqTpXp8y/pub?gid=470430875&single=true&output=csv';
 
         function getBufferStyle(warningLevel) {
             if (warningLevel === 1) return { color: 'yellow', fillColor: 'yellow', className: 'flash-yellow' };
@@ -297,64 +298,94 @@
             return layerLogos[4]; 
         }
 
-        fetch('https://sheetlabs.com/LA25/LIGTASAGADEWSV3')
-            .then(response => response.json())
-            .then(data => {
-                cachedAWSData = data; // Cache data for reports
-                data.forEach(station => {
-                    var lat = parseFloat(station.Latitude);
-                    var lng = parseFloat(station.Longitude);
-                    var warningLevel = parseInt(station.RainfallLandslidethresholdwarninglevel);
+        // Shared function to process data regardless of source (Sheetlabs JSON or Google CSV)
+        function processAWSData(data) {
+            cachedAWSData = data; // Cache data for reports
+            warningLayerGroup.clearLayers(); // Clear old layers if any
 
-                    if (isNaN(lat) || isNaN(lng)) return;
+            data.forEach(station => {
+                // Ensure flexible parsing for CSV strings vs JSON numbers
+                var lat = parseFloat(station.Latitude);
+                var lng = parseFloat(station.Longitude);
+                var warningLevel = parseInt(station.RainfallLandslidethresholdwarninglevel);
 
-                    var bufferStyle = getBufferStyle(warningLevel);
-                    if (bufferStyle.color !== 'transparent') {
-                        var circle = L.circle([lat, lng], {
-                            color: bufferStyle.color,
-                            fillColor: bufferStyle.fillColor,
-                            fillOpacity: 0.3,
-                            radius: 20000,
-                            className: bufferStyle.className,
-                            dashArray: '5, 5' // 5-pixel dash, 5-pixel gap
-                        });
-                        warningLayerGroup.addLayer(circle);
-                    }
+                if (isNaN(lat) || isNaN(lng)) return;
 
-                    var iconUrl = getStationIcon(station.StationName);
-                    var marker = L.marker([lat, lng], {
-                        icon: L.icon({
-                            iconUrl: iconUrl,
-                            iconSize: [25, 25],
-                            iconAnchor: [12, 12]
-                        })
+                var bufferStyle = getBufferStyle(warningLevel);
+                if (bufferStyle.color !== 'transparent') {
+                    var circle = L.circle([lat, lng], {
+                        color: bufferStyle.color,
+                        fillColor: bufferStyle.fillColor,
+                        fillOpacity: 0.3,
+                        radius: 20000,
+                        className: bufferStyle.className,
+                        dashArray: '5, 5' // 5-pixel dash, 5-pixel gap
                     });
+                    warningLayerGroup.addLayer(circle);
+                }
 
-                    var popupContent = `
-                        <div class="popup-content">
-                            <h2>${station.StationName || station.Station || 'Unknown Station'}</h2>
-                            <table class="popup-table">
-                                <tr><th>Field</th><th>Value</th></tr>
-                                <tr><td>Status</td><td>${station.Status || 'N/A'}</td></tr>
-                                <tr><td>Location Details</td><td>${station.LocationDetails || station.Municipality || 'N/A'}</td></tr>
-                                <tr><td>Antecedent + Accumulated Rainfall</td><td>${station.Rainfall || station.R24H || '0'}</td></tr>
-                                <tr><td>Warning Level</td><td>${station.RainfallLandslidethresholdwarninglevel || '0'}</td></tr>
-                                <tr><td>Rainfall Description</td><td>${station.Rainfalldescription || 'N/A'}</td></tr>
-                                <tr><td>Possible Scenario</td><td>${station.Possiblescenario || 'N/A'}</td></tr>
-                                <tr><td>Recommended Actions</td><td>${station.Recommendedactions || 'N/A'}</td></tr>
-                                <tr><td>Warning Level Guide</td><td><img src="${station.Warninglevelguide || ''}" alt="Warning Level Guide" onerror="this.style.display='none'"/></td></tr>
-                                <tr><td>Image Link</td><td><img src="${station.Imagelink || ''}" alt="Image" onerror="this.style.display='none'"/></td></tr>
-                                <tr><td>Municipality and Barangay Covered</td><td>${station.Daterange || station.Municipality || 'N/A'}</td></tr>
-                            </table>
-                        </div>
-                    `;
-                    marker.bindPopup(popupContent);
-                    marker.on('click', () => { updatePropertiesTable("AWS Station", station); });
-                    warningLayerGroup.addLayer(marker);
+                var iconUrl = getStationIcon(station.StationName);
+                var marker = L.marker([lat, lng], {
+                    icon: L.icon({
+                        iconUrl: iconUrl,
+                        iconSize: [25, 25],
+                        iconAnchor: [12, 12]
+                    })
                 });
-                if(typeof initSidebarControls === 'function') initSidebarControls();
+
+                var popupContent = `
+                    <div class="popup-content">
+                        <h2>${station.StationName || station.Station || 'Unknown Station'}</h2>
+                        <table class="popup-table">
+                            <tr><th>Field</th><th>Value</th></tr>
+                            <tr><td>Status</td><td>${station.Status || 'N/A'}</td></tr>
+                            <tr><td>Location Details</td><td>${station.LocationDetails || station.Municipality || 'N/A'}</td></tr>
+                            <tr><td>Antecedent + Accumulated Rainfall</td><td>${station.Rainfall || station.R24H || '0'}</td></tr>
+                            <tr><td>Warning Level</td><td>${station.RainfallLandslidethresholdwarninglevel || '0'}</td></tr>
+                            <tr><td>Rainfall Description</td><td>${station.Rainfalldescription || 'N/A'}</td></tr>
+                            <tr><td>Possible Scenario</td><td>${station.Possiblescenario || 'N/A'}</td></tr>
+                            <tr><td>Recommended Actions</td><td>${station.Recommendedactions || 'N/A'}</td></tr>
+                            <tr><td>Warning Level Guide</td><td><img src="${station.Warninglevelguide || ''}" alt="Warning Level Guide" onerror="this.style.display='none'"/></td></tr>
+                            <tr><td>Image Link</td><td><img src="${station.Imagelink || ''}" alt="Image" onerror="this.style.display='none'"/></td></tr>
+                            <tr><td>Municipality and Barangay Covered</td><td>${station.Daterange || station.Covered || 'N/A'}</td></tr>
+                        </table>
+                    </div>
+                `;
+                marker.bindPopup(popupContent);
+                marker.on('click', () => { updatePropertiesTable("AWS Station", station); });
+                warningLayerGroup.addLayer(marker);
+            });
+
+            if(typeof initSidebarControls === 'function') initSidebarControls();
+        }
+
+        // Fetch Logic: Try Sheetlabs -> Fail -> Try Papa Parse (Google Sheets)
+        fetch('')
+            .then(response => {
+                if (!response.ok) throw new Error("Sheetlabs fetch failed");
+                return response.json();
             })
-            .catch(error => { console.error('Error fetching Sheetlabs data:', error); });
+            .then(data => {
+                console.log("Data loaded via Sheetlabs API");
+                processAWSData(data);
+            })
+            .catch(error => { 
+                console.warn('Sheetlabs unavailable, attempting fallback to Google Sheets CSV via PapaParse...', error);
+                
+                Papa.parse(googleSheetCSV, {
+                    download: true,
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        console.log("Data loaded via Google Sheets CSV (Fallback)");
+                        processAWSData(results.data);
+                    },
+                    error: function(err) {
+                        console.error("Critical Error: Both Sheetlabs and Google CSV failed.", err);
+                        alert("Unable to load weather station data. Please check your connection.");
+                    }
+                });
+            });
 
         // --- 7. CReSS WEATHER FORECAST ---
 
